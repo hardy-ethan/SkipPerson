@@ -122,9 +122,9 @@ def cut_video_by_segments(video_path, segments_to_keep, output_path):
 
 
 def process_media(
-    media_path, min_speakers, speaker_to_remove=None, auth_token=None, audio_track=None
+    media_path, min_speakers, speakers_to_remove=None, auth_token=None, audio_track=None
 ):
-    """Process media file to remove a specific speaker's segments"""
+    """Process media file to remove specific speakers' segments"""
     start_time = time.time()
 
     # Determine if input is audio or video
@@ -174,8 +174,8 @@ def process_media(
     speakers = sorted(list(unique_speakers))
     print(f"Detected {len(speakers)} speakers")
 
-    # Let user identify which speaker to remove
-    if speaker_to_remove is None:
+    # Let user identify which speakers to remove
+    if speakers_to_remove is None or len(speakers_to_remove) == 0:
         speaker_segments = defaultdict(list)
 
         print("Collecting speaker segments...")
@@ -199,13 +199,14 @@ def process_media(
             sf.write(temp_file, speaker_audio, sr)
             print(f"Sample for Speaker {i+1} saved to: {temp_file}")
 
-        speaker_idx = (
-            int(input(f"Enter the speaker to remove (1-{len(speakers)}): ")) - 1
-        )
-        target_speaker = speakers[speaker_idx]
+        # Allow selection of multiple speakers
+        speaker_input = input(f"Enter the speaker(s) to remove (1-{len(speakers)}, comma-separated for multiple): ")
+        speaker_indices = [int(idx.strip()) - 1 for idx in speaker_input.split(',')]
+        target_speakers = [speakers[idx] for idx in speaker_indices]
     else:
-        speaker_idx = speaker_to_remove - 1
-        target_speaker = speakers[speaker_idx]
+        # Convert 1-based indices to 0-based
+        speaker_indices = [idx - 1 for idx in speakers_to_remove]
+        target_speakers = [speakers[idx] for idx in speaker_indices]
 
     # Process diarization to get segments to remove
     print("Identifying segments to remove...")
@@ -217,7 +218,7 @@ def process_media(
         list(diarization.itertracks(yield_label=True)), desc="Processing segments"
     ):
         total_segments += 1
-        if speaker == target_speaker:
+        if speaker in target_speakers:
             segments_to_remove.append((turn.start, turn.end))
             total_remove += 1
 
@@ -241,6 +242,10 @@ def process_media(
         segments_to_keep.append((current_time, audio_duration))
 
     print(f"Keeping {len(segments_to_keep)} segments of video")
+
+    # Create more descriptive output filename
+    speakers_str = "multiple_speakers" if len(target_speakers) > 1 else "person_B"
+    output_path = os.path.splitext(media_path)[0] + f"_no_{speakers_str}" + file_ext
 
     # Cut and concat video
     output_path = os.path.splitext(media_path)[0] + "_no_person_B" + file_ext
@@ -268,7 +273,8 @@ def main():
         "min_speakers", type=int, help="Minimum number of speakers in the media"
     )
     parser.add_argument(
-        "--speaker", type=int, default=None, help="Speaker index to remove (1-based)"
+        "--speakers", type=int, nargs='+', default=None,
+        help="Speaker indices to remove (1-based)"
     )
     parser.add_argument(
         "--auth_token",
@@ -287,7 +293,7 @@ def main():
     output_path = process_media(
         args.media_path,
         args.min_speakers,
-        args.speaker,
+        args.speakers,
         args.auth_token,
         args.audio_track,
     )
