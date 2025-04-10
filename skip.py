@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 import librosa
 import soundfile as sf
+import torch
 from pyannote.audio import Pipeline
 import os
 import subprocess
@@ -158,7 +159,7 @@ def process_media(
     diarization_start = time.time()
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization", use_auth_token=auth_token
-    )
+    ).to(torch.device("cuda"))
     diarization = pipeline(audio_path, min_speakers=min_speakers)
     diarization_time = time.time() - diarization_start
     print(f"Diarization completed in {diarization_time:.1f} seconds")
