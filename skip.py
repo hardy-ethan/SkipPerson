@@ -39,7 +39,7 @@ def get_audio_tracks(video_path):
             channels = parts[3]
             info += f", Channels: {channels}"
 
-        tracks.append((index, info))
+        tracks.append(info)
 
     return tracks
 
@@ -59,11 +59,11 @@ def extract_audio_from_video(video_path, stream_index=None):
 
         if len(tracks) > 1:
             print("Multiple audio tracks detected:")
-            for i, (index, info) in enumerate(tracks):
+            for i, info in enumerate(tracks):
                 print(f"{i + 1}. {info}")
 
             selection = int(input(f"Select audio track to use (1-{len(tracks)}): "))
-            stream_index = tracks[selection - 1][0]
+            stream_index = selection - 1
         else:
             print(f"Single audio track detected: {tracks[0][1]}")
             stream_index = tracks[0][0]
