@@ -9,12 +9,73 @@ from collections import defaultdict
 from tqdm import tqdm
 import time
 
-def extract_audio_from_video(video_path):
+
+def get_audio_tracks(video_path):
+    """Detect and return information about audio tracks in the video"""
+    print("Detecting audio tracks...")
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries",
+         "stream=index:stream_tags=language,title:stream=channels", "-of", "csv=p=0", video_path],
+        capture_output=True, text=True, check=True
+    )
+
+    tracks = []
+    for i, line in enumerate(result.stdout.strip().split('\n')):
+        if not line:
+            continue
+        parts = line.split(',')
+        index = parts[0]
+        info = f"Track {i + 1} (stream {index})"
+
+        # Add language and title if available
+        if len(parts) > 1 and parts[1]:
+            info += f", Language: {parts[1]}"
+        if len(parts) > 2 and parts[2]:
+            info += f", Title: {parts[2]}"
+
+        # Add channel info
+        if len(parts) > 3:
+            channels = parts[3]
+            info += f", Channels: {channels}"
+
+        tracks.append((index, info))
+
+    return tracks
+
+
+def extract_audio_from_video(video_path, stream_index=None):
     """Extract audio from video file using ffmpeg for diarization purposes only"""
     print("Extracting audio from video for diarization...")
     audio_path = os.path.splitext(video_path)[0] + "_TEMP124133audio.wav"
-    subprocess.run(["ffmpeg", "-y", "-i", video_path, "-q:a", "0", "-map", "a", audio_path], 
-                   check=True)
+
+    # Check for multiple audio tracks
+    if stream_index is None:
+        tracks = get_audio_tracks(video_path)
+
+        if not tracks:
+            print("No audio tracks found in the video.")
+            return None
+
+        if len(tracks) > 1:
+            print("Multiple audio tracks detected:")
+            for i, (index, info) in enumerate(tracks):
+                print(f"{i + 1}. {info}")
+
+            selection = int(input(f"Select audio track to use (1-{len(tracks)}): "))
+            stream_index = tracks[selection - 1][0]
+        else:
+            print(f"Single audio track detected: {tracks[0][1]}")
+            stream_index = tracks[0][0]
+
+    # Extract the selected audio track
+    cmd = ["ffmpeg", "-y", "-i", video_path, "-q:a", "0"]
+    if stream_index is not None:
+        cmd.extend(["-map", f"0:a:{stream_index}"])
+    else:
+        cmd.extend(["-map", "a"])
+    cmd.append(audio_path)
+
+    subprocess.run(cmd, check=True)
     return audio_path
 
 def cut_video_by_segments(video_path, segments_to_keep, output_path):
@@ -58,7 +119,7 @@ def cut_video_by_segments(video_path, segments_to_keep, output_path):
     
     return output_path
 
-def process_media(media_path, min_speakers, speaker_to_remove=None, auth_token=None):
+def process_media(media_path, min_speakers, speaker_to_remove=None, auth_token=None, audio_track=None):
     """Process media file to remove a specific speaker's segments"""
     start_time = time.time()
     
@@ -71,8 +132,11 @@ def process_media(media_path, min_speakers, speaker_to_remove=None, auth_token=N
         return None
     
     # Extract audio for diarization
-    audio_path = extract_audio_from_video(media_path)
-    
+    audio_path = extract_audio_from_video(media_path, audio_track)
+    if audio_path is None:
+        print("Failed to extract audio. Exiting.")
+        return None
+
     # Load audio for duration info
     print("Loading audio file...")
     y, sr = librosa.load(audio_path, sr=None)
@@ -186,9 +250,10 @@ def main():
     parser.add_argument("min_speakers", type=int, help="Minimum number of speakers in the media")
     parser.add_argument("--speaker", type=int, default=None, help="Speaker index to remove (1-based)")
     parser.add_argument("--auth_token", type=str, required=True, help="Hugging Face token for pyannote.audio")
-    
+    parser.add_argument("--audio_track", type=int, default=None, help="Audio track to use (0-based stream index)")
+
     args = parser.parse_args()
-    output_path = process_media(args.media_path, args.min_speakers, args.speaker, args.auth_token)
+    output_path = process_media(args.media_path, args.min_speakers, args.speaker, args.auth_token, args.audio_track)
     print(f"Processed file saved to: {output_path}")
 
 if __name__ == "__main__":
