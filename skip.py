@@ -34,7 +34,7 @@ def cut_video_by_segments(video_path, segments_to_keep, output_path):
         subprocess.run([
             "ffmpeg", "-y", "-i", video_path, 
             "-ss", str(start_sec), "-t", str(duration),
-            "-c:v", "libx264", "-preset", "fast", "-c:a", "aac",
+            "-c", "copy",
             segment_file
         ], check=True)
     
