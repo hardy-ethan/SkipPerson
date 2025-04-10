@@ -64,9 +64,6 @@ def extract_audio_from_video(video_path, stream_index=None):
 
             selection = int(input(f"Select audio track to use (1-{len(tracks)}): "))
             stream_index = selection - 1
-        else:
-            print(f"Single audio track detected: {tracks[0][1]}")
-            stream_index = tracks[0][0]
 
     # Extract the selected audio track
     cmd = ["ffmpeg", "-y", "-i", video_path, "-q:a", "0"]
