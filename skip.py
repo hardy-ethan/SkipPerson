@@ -80,43 +80,16 @@ def extract_audio_from_video(video_path, stream_index=None):
 def cut_video_by_segments(video_path, segments_to_keep, output_path):
     """Cut video based on segments_to_keep"""
     print("Cutting video based on kept segments...")
-    temp_dir = "temp_video_segments"
-    os.makedirs(temp_dir, exist_ok=True)
 
-    # Create temporary video segments
-    segment_files = []
-    for i, (start_sec, end_sec) in enumerate(
-        tqdm(segments_to_keep, desc="Cutting video segments")
-    ):
-        duration = end_sec - start_sec
-        segment_file = f"{temp_dir}/segment_{i}.mp4"
-        segment_files.append(segment_file)
+    select_string = f"'{'+'.join(map(lambda segment: f'between(t,{segment[0]},{segment[1]})', segments_to_keep))}'"
 
-        # Cut video segment using ffmpeg
-        subprocess.run([
-            "ffmpeg", "-y", "-i", video_path,
-            "-ss", str(start_sec), "-t", str(duration),
-            "-c", "copy",
-            segment_file
-        ], check=True)
-    
-    # Create ffmpeg concat file
-    concat_file = f"{temp_dir}/concat_list.txt"
-    with open(concat_file, "w") as f:
-        for segment_file in segment_files:
-            f.write(f"file '{os.path.abspath(segment_file)}'\n")
-
-    # Concat video segments
+    # Cut video
     subprocess.run([
-        "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-        "-i", concat_file, "-c", "copy", output_path
+        "ffmpeg", "-i", video_path,
+        "-vf", f"select={select_string},setpts=N/FRAME_RATE/TB",
+        "-af", f"aselect={select_string},asetpts=N/SR/TB",
+        output_path
     ], check=True)
-    
-    # Clean up temp files
-    for file in segment_files + [concat_file]:
-        if os.path.exists(file):
-            os.remove(file)
-    os.rmdir(temp_dir)
 
     return output_path
 
@@ -243,12 +216,9 @@ def process_media(
 
     print(f"Keeping {len(segments_to_keep)} segments of video")
 
-    # Create more descriptive output filename
+    # Cut and concat video
     speakers_str = "multiple_speakers" if len(target_speakers) > 1 else "person_B"
     output_path = os.path.splitext(media_path)[0] + f"_no_{speakers_str}" + file_ext
-
-    # Cut and concat video
-    output_path = os.path.splitext(media_path)[0] + "_no_person_B" + file_ext
     cut_video_by_segments(media_path, segments_to_keep, output_path)
 
     # Clean up temp files
